@@ -70,6 +70,7 @@ export class GroupWindow extends AsyncWindow {
      * @param app Window to align this tab set window to.
      */
     public async alignPositionToApp(app: TabWindow): Promise<void> {
+        this.leaveGroup();
         const win: fin.OpenFinWindow = app.finWindow;
         const bounds = await app.getWindowBounds();
 
@@ -121,7 +122,8 @@ export class GroupWindow extends AsyncWindow {
                 return Promise.all([resize, moveto]);
             }
         } else {
-            return this._tabGroup.activeTab.window.restore();
+            await Promise.all(this._tabGroup.tabs.map(tab => tab.window.restore()));
+            return this._tabGroup.hideAllTabsMinusActiveTab();
         }
     }
 
@@ -198,7 +200,7 @@ export class GroupWindow extends AsyncWindow {
                 {
                     name: this._tabGroup.ID,
                     url: this._initialWindowOptions.url || DEFAULT_UI_URL,
-                    autoShow: false,
+                    autoShow: true,
                     frame: false,
                     maximizable: false,
                     resizable: false,
@@ -208,7 +210,8 @@ export class GroupWindow extends AsyncWindow {
                     defaultTop: this._initialWindowOptions.screenY,
                     defaultCentered: !this._initialWindowOptions.screenX && !this._initialWindowOptions.screenY,
                     saveWindowState: false,
-                    taskbarIconGroup: this._tabGroup.ID
+                    taskbarIconGroup: this._tabGroup.ID,
+                    waitForPageLoad: true
                 },
                 () => {
                     res(win);

@@ -27,7 +27,9 @@ import {ZIndexer} from './ZIndexer';
  * @param tabService The service itself which holds the tab groups
  * @param message Application or tab to be ejected
  */
-export async function ejectTab(tabService: TabService, message: TabIdentifier&TabWindowOptions, tabGroup?: TabGroup|undefined) {
+export async function ejectTab(message: TabIdentifier&TabWindowOptions, tabGroup?: TabGroup|undefined) {
+    const tabService: TabService = TabService.INSTANCE;
+
     // Get the tab that was ejected.
     const ejectedTab: Tab|undefined =
         tabGroup ? tabGroup.getTab({name: message.name, uuid: message.uuid}) : tabService.getTab({uuid: message.uuid, name: message.name});
@@ -43,24 +45,29 @@ export async function ejectTab(tabService: TabService, message: TabIdentifier&Ta
     // If we have a screenX & screenY we check if there is a tab group + tab window underneath
     if (message.screenX && message.screenY) {
         isOverTabWindowResult =
-            getWindowAt(message.screenX, message.screenY, ejectedTab.ID);  // await tabService.isPointOverTabGroup(message.screenX, message.screenY);
+            getWindowAt(message.screenX, message.screenY /*, ejectedTab.ID*/);  // await tabService.isPointOverTabGroup(message.screenX, message.screenY);
     }
 
     // If there is a window underneath our point
-    if (isOverTabWindowResult) {
-        const isOverTabGroup = TabService.INSTANCE.getTabGroupByApp(isOverTabWindowResult);
-        if (compareTabGroupUIs(isOverTabWindowResult.uuid, ejectedTab.ID.uuid)) {
+    if (isOverTabWindowResult && tabService.getTabGroupByApp(isOverTabWindowResult) === tabGroup) {
+        // If the window under our point is in the same group as the one being dragged, we do nothing
+        return;
+    } else if (isOverTabWindowResult) {
+        const isOverTabGroup = tabService.getTabGroupByApp(isOverTabWindowResult);
+        if (tabService.applicationConfigManager.compareConfigBetweenApplications(isOverTabWindowResult.uuid, ejectedTab.ID.uuid)) {
             if (isOverTabGroup) {
                 if (isOverTabGroup.ID !== ejectedTab.tabGroup.ID) {
-                    await ejectedTab.tabGroup.removeTab(ejectedTab.ID, false, true);
-                    await isOverTabGroup.addTab({tabID: ejectedTab.ID});
+                    await ejectedTab.tabGroup.removeTab(ejectedTab.ID, false, true, true, false);
+                    const tab = await new Tab({tabID: ejectedTab.ID}).init();
+                    await isOverTabGroup.addTab(tab);
                 }
             } else {
+                await ejectedTab.tabGroup.removeTab(ejectedTab.ID, false, true, true, false);
                 await TabService.INSTANCE.createTabGroupWithTabs([isOverTabWindowResult, ejectedTab.ID]);
             }
         }
     } else {
-        await ejectedTab.tabGroup.removeTab(ejectedTab.ID, false, true);
+        await ejectedTab.tabGroup.removeTab(ejectedTab.ID, false, true, true, true);
 
         if (message.screenX && message.screenY) {
             ejectedTab.window.moveTo(message.screenX!, message.screenY!);
@@ -69,7 +76,6 @@ export async function ejectTab(tabService: TabService, message: TabIdentifier&Ta
         }
 
         const bounds = await ejectedTab.window.getWindowBounds();
-
         ejectedTab.window.moveTo(bounds.left, bounds.top);
         ejectedTab.window.show();
         return;
@@ -104,11 +110,7 @@ export async function createTabGroupsFromTabBlob(tabBlob: TabBlob[]): Promise<vo
         for (const tab of blob.tabs) {
             const existingTab: Tab|undefined = TabService.INSTANCE.getTab({uuid: tab.uuid, name: tab.name});
 
-            if (existingTab) {
-                await existingTab.tabGroup.removeTab(existingTab.ID, false, true);
-            }
-
-            const newTab: Tab|undefined = await group.addTab({tabID: {uuid: tab.uuid, name: tab.name}}, false, false);
+            const newTab: Tab|undefined = await group.addTab(existingTab || await new Tab({tabID: tab}).init(), false, false);
 
             if (!newTab) {
                 console.error('No tab was added');
@@ -143,23 +145,21 @@ export function getWindowAt(x: number, y: number, exclude?: Identity) {
     const id = exclude ? `${exclude.uuid}/${exclude.name}` : null;
     const windows: SnapWindow[] = (window as Window & {snapService: SnapService}).snapService['windows'];
     const windowsAtPoint: SnapWindow[] = windows.filter((window: SnapWindow) => {
-        const state: WindowState = window.getState();
-        return window.getId() !== id && RectUtils.isPointInRect(state.center, state.halfSize, point);
+        const state: WindowState = Object.assign({}, window.getState());
+
+        // Hack to deal with tabstrips being unknown to the snapservice
+        const tabGroup = TabService.INSTANCE.getTabGroupByApp(window.getIdentity());
+        if (tabGroup) {
+            state.center = {x: state.center.x, y: state.center.y - 30};
+            state.halfSize = {x: state.halfSize.x, y: state.halfSize.y + 15};
+        }
+
+        return window.getId() !== id && !window.getState().hidden && RectUtils.isPointInRect(state.center, state.halfSize, point);
     });
+
+
 
     const sortedWindows: TabIdentifier[]|null = ZIndexer.INSTANCE.getTop(windowsAtPoint.map(window => window.getIdentity()));
 
     return (sortedWindows && sortedWindows[0]) || null;
-}
-
-/**
- * Checks and Compares two UUIDs to see if they have compatible UIs for tabbing.
- * @param uuid1 First UUID to Compare
- * @param uuid2 Second UUId to Compare
- */
-export function compareTabGroupUIs(uuid1: string, uuid2: string) {
-    const uuid1Config = TabService.INSTANCE.getAppUIConfig(uuid1);
-    const uuid2Config = TabService.INSTANCE.getAppUIConfig(uuid2);
-
-    return ((uuid1Config && uuid2Config && uuid1Config.url === uuid2Config.url) || (!uuid1Config && !uuid2Config));
 }

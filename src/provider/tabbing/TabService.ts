@@ -1,6 +1,9 @@
+import {Application} from 'hadouken-js-adapter';
+
 import {ApplicationUIConfig, Bounds, TabIdentifier, TabPackage, TabWindowOptions} from '../../client/types';
 
 import {APIHandler} from './APIHandler';
+import {ApplicationConfigManager} from './components/ApplicationConfigManager';
 import {DragWindowManager} from './DragWindowManager';
 import {EventHandler} from './EventHandler';
 import {Tab} from './Tab';
@@ -51,15 +54,16 @@ export class TabService {
      */
     private _zIndexer: ZIndexer = new ZIndexer();
 
-    private _applicationUIConfigurations: ApplicationUIConfig[];
-
+    /**
+     * Handles the application ui configs
+     */
+    private mApplicationConfigManager: ApplicationConfigManager;
 
     /**
      * Constructor of the TabService Class.
      */
     constructor() {
         this._tabGroups = [];
-        this._applicationUIConfigurations = [];
         this._dragWindowManager = new DragWindowManager();
         this._dragWindowManager.init();
 
@@ -68,6 +72,8 @@ export class TabService {
 
         this.mTabApiEventHandler = new TabAPIActionProcessor(this);
         this.mTabApiEventHandler.init();
+
+        this.mApplicationConfigManager = new ApplicationConfigManager();
 
         TabService.INSTANCE = this;
     }
@@ -93,10 +99,8 @@ export class TabService {
      * @param {TabWindowOptions} WindowOptions Window Options used to create the tab group window (positions, dimensions, url, etc...)
      * @returns {TabGroup} TabGroup
      */
-    public async addTabGroup(windowOptions: TabWindowOptions): Promise<TabGroup> {
+    public addTabGroup(windowOptions: TabWindowOptions): TabGroup {
         const group = new TabGroup(windowOptions);
-        // await group.init();
-
         this._tabGroups.push(group);
 
         return group;
@@ -164,26 +168,29 @@ export class TabService {
      * @param tabs An array of Identities to add to a group.
      */
     public async createTabGroupWithTabs(tabs: TabIdentifier[]) {
-        if (tabs.length === 0) {
-            return Promise.reject('Must provide at least 1 Tab Identifier');
+        if (tabs.length < 2) {
+            return Promise.reject('Must provide at least 2 Tab Identifiers! ');
         }
-        const firstTab = tabs.shift();
+        const group = this.addTabGroup({});
 
-        if (!firstTab) {
-            return Promise.reject('Must provide at least 1 Tab Identifier');
+        const tabsP = await Promise.all(tabs.map(async ID => await new Tab({tabID: ID}).init()));
+
+        const firstTab = tabsP.shift();
+
+        if (firstTab) {
+            const bounds = await firstTab.window.getWindowBounds();
+            tabsP.forEach(tab => tab.window.finWindow.setBounds(bounds.left, bounds.top, bounds.width, bounds.height));
+            tabsP[tabsP.length - 1].window.finWindow.bringToFront();
+            await group.addTab(firstTab, false);
         }
 
-        const group = await this.addTabGroup({});
+        await Promise.all(tabsP.map(tab => group.addTab(tab, false)));
 
-        await group.addTab({tabID: firstTab});
-
-        for (const tab of tabs) {
-            await group.addTab({tabID: tab});
-        }
+        await group.switchTab(tabs[tabs.length - 1]);
+        await group.hideAllTabsMinusActiveTab();
 
         return;
     }
-
     /**
      * Checks for any windows that is under a specific point.
      * @param {number} x X Coordinate
@@ -257,5 +264,13 @@ export class TabService {
      */
     public get tabGroups(): TabGroup[] {
         return this._tabGroups;
+    }
+
+    /**
+     * Returns the application config manager
+     * @returns {ApplicationConfigManager} The container that holds the tab window options bound to the
+     */
+    public get applicationConfigManager(): ApplicationConfigManager {
+        return this.mApplicationConfigManager;
     }
 }
