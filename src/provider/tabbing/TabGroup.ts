@@ -1,5 +1,7 @@
+import {Provider} from 'hadouken-js-adapter/out/types/src/api/services/provider';
+
 import {TabApiEvents} from '../../client/APITypes';
-import {TabIdentifier, TabPackage, TabWindowOptions} from '../../client/types';
+import {TabGroupEventPayload, TabIdentifier, TabPackage, TabWindowOptions} from '../../client/types';
 
 import {GroupWindow} from './GroupWindow';
 import {Tab} from './Tab';
@@ -30,15 +32,22 @@ export class TabGroup {
      */
     private _activeTab!: Tab;
 
+    private _isRestored = false;
+
+    /**
+     * Handle to the service provider
+     */
+    private mService: Provider;
+
     /**
      * Constructor for the TabGroup Class.
      * @param {TabWindowOptions} windowOptions
      */
-
     constructor(windowOptions: TabWindowOptions) {
         this.ID = uuidv4();
         this._tabs = [];
         this._window = new GroupWindow(windowOptions, this);
+        this.mService = (window as Window & {providerChannel: Provider}).providerChannel;
     }
 
     /**
@@ -46,7 +55,9 @@ export class TabGroup {
      */
     private async _initializeTabGroup() {
         await this._window.init();
-        await this._window.alignPositionToApp(this._tabs[0].window);
+        if (!this._isRestored) {
+            await this._window.alignPositionToApp(this._tabs[0].window);
+        }
     }
 
     public async addTab(tab: Tab, handleTabSwitch = true, handleAlignment = true, index = -1) {
@@ -69,15 +80,18 @@ export class TabGroup {
         }
 
         if (this._tabs.length === 1) {
-            const firstTabConfig = TabService.INSTANCE.applicationConfigManager.getApplicationUIConfig(tab.ID.uuid) || {};
+            if (!this._isRestored) {
+                const firstTabConfig = TabService.INSTANCE.applicationConfigManager.getApplicationUIConfig(tab.ID.uuid) || {};
 
-            const bounds = await tab.window.getWindowBounds();
-            this._window.updateInitialWindowOptions(
-                Object.assign({}, firstTabConfig as object, {width: bounds.width, screenX: bounds.left, screenY: bounds.top}));
+                const bounds = await tab.window.getWindowBounds();
+                this._window.updateInitialWindowOptions(
+                    Object.assign({}, firstTabConfig as object, {width: bounds.width, screenX: bounds.left, screenY: bounds.top}));
+            }
+
             await this._initializeTabGroup();
         }
 
-        if (handleAlignment && this._tabs.length > 1) {
+        if (handleAlignment && this._tabs.length || this._isRestored) {
             await tab.window.alignPositionToTabGroup();
         }
 
@@ -89,7 +103,7 @@ export class TabGroup {
             await tab.window.hide();
         }
 
-        return;
+        return tab;
     }
 
     /**
@@ -147,7 +161,7 @@ export class TabGroup {
      * @param {boolean} closeApp Flag to force close the tab window or not.
      * @param {boolean} closeGroupWindowCheck Flag to check if we should close the tab set window if there are no more tabs.
      */
-    public async removeTab(tabID: TabIdentifier, closeApp: boolean, closeGroupWindowCheck = false, switchTab = true, removeFrame = true): Promise<void> {
+    public async removeTab(tabID: TabIdentifier, closeApp: boolean, closeGroupWindowCheck = false, switchTab = true, restoreWindowState = true): Promise<void> {
         const index: number = this.getTabIndex(tabID);
 
         if (index === -1) {
@@ -169,7 +183,7 @@ export class TabGroup {
         }
 
         await tab.remove(closeApp);
-        if (removeFrame) {
+        if (restoreWindowState) {
             tab.deInit();
         }
 
@@ -246,7 +260,8 @@ export class TabGroup {
      */
     public setActiveTab(tab: Tab): void {
         this._activeTab = tab;
-        fin.desktop.InterApplicationBus.send(fin.desktop.Application.getCurrent().uuid, this.ID, TabApiEvents.TABACTIVATED, tab.ID);
+        const payload: TabGroupEventPayload = {tabGroupId: this.ID, tabID: tab.ID};
+        this.mService.dispatch({uuid: fin.desktop.Application.getCurrent().uuid, name: this.ID}, 'tab-activated', payload);
     }
 
     /**
@@ -282,5 +297,9 @@ export class TabGroup {
      */
     public get tabs(): Tab[] {
         return this._tabs;
+    }
+
+    public set isRestored(isRestored: boolean) {
+        this._isRestored = isRestored;
     }
 }

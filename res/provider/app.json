@@ -1,26 +1,21 @@
 {
     "devtools_port": 9091,
     "startup_app": {
-        "name": "Layout-Manager",
+        "name": "layouts-service",
         "description": "OpenFin Layouts Managing Service",
         "url": "https://cdn.openfin.co/services/openfin/layouts/stable/index.html",
-        "uuid": "Layout-Manager",
+        "uuid": "layouts-service",
         "autoShow": true,
         "showTaskbarIcon": true,
         "defaultHeight": 300,
         "defaultWidth": 400,
-        "_experimental": {
-            "v2Api": true
+        "enableAppLogging": true,
+        "logManagement": {
+            "enabled": true
         }
     },
-    "exports": {
-        "name": "layoutsManager",
-        "supportedVersions": [
-            "0.0.1"
-        ]
-    },
     "runtime": {
-        "arguments": "--v=1 --enable-crash-reporting --enable-aggressive-domstorage-flushing",
+        "arguments": "--enable-aggressive-domstorage-flushing",
         "version": "9.61.33.32"
     }
 }

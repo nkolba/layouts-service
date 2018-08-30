@@ -15,6 +15,8 @@ export interface Bounds {
     bottom?: number;
 }
 
+export type CustomData = any;
+
 export interface WindowState extends Bounds {
     uuid: string;
     name: string;
@@ -22,7 +24,7 @@ export interface WindowState extends Bounds {
     state: string;
     info: any;  // getinfo call...
     windowGroup: Identity[];
-    customData?: any;  // applications can add any context or other necessary data here
+    customData?: CustomData;  // applications can add any context or other necessary data here
 }
 
 export interface LayoutApp {
@@ -78,8 +80,8 @@ export interface TabIdentifier {
 }
 
 export enum TabServiceID {
-    NAME = 'Layout-Manager',
-    UUID = 'Layout-Manager'
+    NAME = 'layouts-service',
+    UUID = 'layouts-service'
 }
 
 export interface TabOptions {
@@ -164,4 +166,19 @@ export interface TabAPIReorderMessage extends TabAPIMessage {
 
 export interface ApplicationUIConfig {
     [uuid: string]: TabWindowOptions;
+}
+
+export interface DropPosition {
+    screenX: number;
+    screenY: number;
+}
+
+export interface TabGroupEventPayload {
+    tabGroupId: string;
+    tabID: TabIdentifier;
+}
+
+export interface JoinTabGroupPayload extends TabGroupEventPayload {
+    tabProps: TabProperties;
+    index: number;
 }
