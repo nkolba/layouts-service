@@ -280,7 +280,7 @@ export class TabGroup {
      * @returns {Tab} The Active Tab
      */
     public get activeTab(): Tab {
-        return this._activeTab;
+        return this._activeTab || this.tabs[0];
     }
 
     /**
