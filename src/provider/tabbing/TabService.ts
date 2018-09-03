@@ -64,21 +64,6 @@ export class TabService {
         TabService.INSTANCE = this;
     }
 
-    public getAppUIConfig(uuid: string) {
-        const conf = this._applicationUIConfigurations.find(config => config.uuid === uuid);
-
-        if (conf) {
-            return conf.config;
-        }
-
-        return;
-    }
-
-    public addAppUIConfig(uuid: string, config: TabWindowOptions) {
-        if (!this.getAppUIConfig(uuid)) {
-            this._applicationUIConfigurations.push({uuid, config});
-        }
-    }
 
     /**
      * Creates a new tab group

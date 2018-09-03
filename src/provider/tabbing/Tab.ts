@@ -82,13 +82,6 @@ export class Tab {
     }
 
     /**
-     * Deinitializes the tab from tabbing.
-     */
-    public async deInit() {
-        await this._tabWindow.deInit();
-    }
-
-    /**
      * Remove the Tab from the group and possibly its window.
      * @param closeApp Flag if we should close the tabs window.
      */
